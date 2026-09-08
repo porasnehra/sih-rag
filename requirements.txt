@@ -1,0 +1,10 @@
+sqlalchemy
+google-generativeai
+faiss-cpu
+python-dotenv
+numpy
+pandas
+ragas
+datasets
+langchain-google-genai
+langchain

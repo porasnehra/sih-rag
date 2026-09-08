@@ -8,3 +8,5 @@ ragas
 datasets
 langchain-google-genai
 langchain
+fastapi
+uvicorn

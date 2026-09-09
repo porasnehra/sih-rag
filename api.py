@@ -21,12 +21,16 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
+from typing import Optional, Dict, Any
+
 class QueryRequest(BaseModel):
     query: str
 
 class QueryResponse(BaseModel):
     answer: str
     sources: list[str] = []
+    standard_details: Optional[Dict[str, Any]] = None
+    laboratories: Optional[Dict[str, Any]] = None
 
 @app.post("/ask", response_model=QueryResponse)
 async def ask_question(request: QueryRequest):
@@ -45,6 +49,14 @@ async def ask_question(request: QueryRequest):
         if not valid_results and results:
             valid_results = []
             
+        # Detect IS Number from top result to provide rich structured data
+        standard_details_data = None
+        laboratories_data = None
+        if valid_results:
+            is_number = valid_results[0]['metadata']['is_number']
+            standard_details_data = await get_standard_details(is_number)
+            laboratories_data = await get_laboratories(is_number)
+            
         # 3. Generate Response
         final_output = generate_response(english_query, valid_results, is_hindi=is_hindi)
         
@@ -52,11 +64,83 @@ async def ask_question(request: QueryRequest):
         if isinstance(final_output, dict):
             return QueryResponse(
                 answer=final_output.get("answer", "No answer generated."),
-                sources=final_output.get("sources", [])
+                sources=final_output.get("sources", []),
+                standard_details=standard_details_data,
+                laboratories=laboratories_data
             )
         else:
-            return QueryResponse(answer=str(final_output), sources=[])
+            return QueryResponse(
+                answer=str(final_output), 
+                sources=[],
+                standard_details=standard_details_data,
+                laboratories=laboratories_data
+            )
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SearchRequest(BaseModel):
+    query: str
+
+@app.post("/get-details-by-query")
+async def get_details_by_query(request: SearchRequest):
+    """
+    Takes a plain text query (e.g. 'pressure cooker'), finds the corresponding standard,
+    and returns all the structured regulatory and laboratory details WITHOUT needing the IS number in the URL.
+    """
+    user_query = request.query
+    if not user_query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+        
+    try:
+        # Retrieve context to find the relevant IS number
+        results = search_vectors(user_query, k=1)
+        if not results or results[0]['score'] >= 1.0:
+            raise HTTPException(status_code=404, detail="Could not find a matching standard for this product.")
+            
+        is_number = results[0]['metadata']['is_number']
+        
+        # Fetch the structured data
+        standard_details_data = await get_standard_details(is_number)
+        laboratories_data = await get_laboratories(is_number)
+        
+        return {
+            "matched_is_number": is_number,
+            "product_title": results[0]['metadata']['title'],
+            "standard_details": standard_details_data,
+            "laboratories": laboratories_data
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/get-laboratories-by-query")
+async def get_laboratories_by_query(request: SearchRequest):
+    """
+    Takes a plain text query (e.g. 'pressure cooker'), finds the corresponding standard,
+    and returns ONLY the structured laboratories data.
+    """
+    user_query = request.query
+    if not user_query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+        
+    try:
+        # Retrieve context to find the relevant IS number
+        results = search_vectors(user_query, k=1)
+        if not results or results[0]['score'] >= 1.0:
+            raise HTTPException(status_code=404, detail="Could not find a matching standard for this product.")
+            
+        is_number = results[0]['metadata']['is_number']
+        laboratories_data = await get_laboratories(is_number)
+        
+        return {
+            "matched_is_number": is_number,
+            "product_title": results[0]['metadata']['title'],
+            "laboratories": laboratories_data["laboratories"]
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

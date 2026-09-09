@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 import os
@@ -10,6 +11,15 @@ from generation import detect_and_translate, generate_response
 load_dotenv()
 
 app = FastAPI(title="BIS Standards RAG API")
+
+# Add CORS middleware to allow the Flutter frontend to communicate with the API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, OPTIONS, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 class QueryRequest(BaseModel):
     query: str

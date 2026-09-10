@@ -16,7 +16,7 @@ app = FastAPI(title="BIS Standards RAG API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins
-    allow_credentials=True,
+    allow_credentials=False, # Must be False when allow_origins is ["*"]
     allow_methods=["*"],  # Allows all methods (GET, POST, OPTIONS, etc.)
     allow_headers=["*"],  # Allows all headers
 )
